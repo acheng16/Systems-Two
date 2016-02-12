@@ -1,0 +1,8 @@
+2
+ls -la
+5
+h
+9
+ls -l
+10
+history

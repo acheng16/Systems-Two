@@ -1,0 +1,143 @@
+#include <pthread.h>
+#include "buffer.h"
+#include <semaphore.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
+
+int pcounter=0;
+int ccounter=0;
+pthread_mutex_t mutex;
+sem_t full, empty;
+buffer_item buffer[BUFFER_SIZE];
+pthread_attr_t attr;
+
+
+void *producer(void *param);
+void *consumer(void *param);
+
+int insert_item(buffer_item item) {
+	
+	if (pcounter == BUFFER_SIZE) {
+		pcounter = 0;
+	}	
+	buffer[pcounter] = item;
+	pcounter++;
+	/* Insert an item into buffer */
+	printf ("--->Producer produce %d\n", item);
+	return 0;
+	/* Return 0 if successful, otherwise
+	 return -1 indicating an error condition */
+}
+int remove_item(buffer_item *item) {
+	if (ccounter == BUFFER_SIZE) {
+		ccounter = 0;
+	}
+	*item = buffer[ccounter];
+	ccounter++;
+	printf("<---Consumer consume %d\n", *item);
+	return 0;
+	/* Return 0 if successful, otherwise
+	 return -1 indicating an error condition */
+}
+
+void *producer(void *param) {
+	buffer_item item;
+	unsigned int seed;
+	int *id = (int*)param;
+	int int_id = *id;	
+
+	do{
+		/* sleep for a random period of time */
+		seed = pthread_self()+time(NULL);
+		int rnum = (rand_r(&seed)%5)+1;
+		printf("producer %d seed is: %d\n", int_id, seed);
+		printf("producer %d sleep for: %d\n", int_id, rnum);
+		sleep(rnum);
+
+		seed = pthread_self()+time(NULL);
+		/* Generate a random number */
+		item = rand_r(&seed);
+	
+		/* empty lock */
+		sem_wait(&empty);
+		
+		/* mutex lock */
+		pthread_mutex_lock(&mutex);
+		
+		insert_item(item);
+		/* release mutex */
+		pthread_mutex_unlock(&mutex);
+		/* signal full */
+		sem_post(&full);
+	}while(1);
+}
+
+void *consumer(void *param){
+	buffer_item item;
+	unsigned int seed;
+	int *id = (int*)param;
+	int int_id = *id;
+	
+	do{
+		/* sleep for rand time */
+		seed = pthread_self()+time(NULL);
+		int rnum = (rand_r(&seed)%5)+1;
+		printf("consumer %d seed is: %d\n", int_id, seed);
+		printf("consumer %d sleep for: %d\n", int_id, rnum);
+		sleep(rnum);
+		
+
+		/* full lock */
+		sem_wait(&full);
+		
+		/* mutex lock */
+		pthread_mutex_lock(&mutex);
+	
+		remove_item(&item);
+		/* release mutex */
+		pthread_mutex_unlock(&mutex);
+		/* signal empty */
+		sem_post(&empty);
+	}while(1);
+}
+
+int main(int argc, char *argv[]){
+	int i;
+
+	if (argc!= 4) {
+		fprintf(stderr, "Incorrect number of arguements are passed in");
+	}
+	int sleepTime = atoi(argv[1]);
+	int pNum = atoi(argv[2]);
+	int cNum = atoi(argv[3]);
+	
+	pthread_t ptid[pNum];
+	
+
+	pthread_mutex_init(&mutex, NULL);
+	pthread_attr_init(&attr);
+	sem_init(&empty, 0, BUFFER_SIZE);
+	
+	sem_init(&full, 0, 0);
+
+	
+	for (i = 0; i< pNum; i++) {
+		/* create producer threads */
+		pthread_create(&ptid[i], &attr, producer, &i);
+		printf("Hi, I am producer: %d, my thread id = %d\n", i, ptid[i]);
+	}
+
+	pthread_t ctid[cNum];	
+	pthread_attr_init(&attr);	
+
+	for (i = 0; i< cNum; i++) {
+		/* create consumer threads */
+		pthread_create(&ctid[i], &attr, consumer, &i);
+		printf("Hi, I am consumer: %d, my thread id = %d\n", i, ctid[i]);
+	}
+
+	sleep(sleepTime);
+	exit(0);
+}
